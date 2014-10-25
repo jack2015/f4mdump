@@ -14,15 +14,21 @@ public:
     CF4mDownloader();
     
     virtual ~CF4mDownloader();
+    
+    void initialize(const std::string &mainUrl, const std::string &wgetCMD);
+    
+    virtual bool canHandleUrl(const std::string &url);
+    
+    virtual bool reportStreamsInfo(std::string &streamInfo);
 
-    void download( const std::string &baseWgetCmd, const std::string &manifestUrl, 
+    virtual void download( const std::string &baseWgetCmd, const std::string &manifestUrl, 
                    const std::string &outFile, const std::string &tmpFile, const int32_t bitrate );
 
-    void downloadWithoutTmpFile( const std::string &baseWgetCmd, const std::string &manifestUrl, 
+    virtual void downloadWithoutTmpFile( const std::string &baseWgetCmd, const std::string &manifestUrl, 
                                  const std::string &outFile, const int32_t bitrate );
-    void terminate();
+    virtual void terminate();
     
-private:
+protected:
     void writeUInt24(FILE *pOutFile, const uint32_t &value);
     void writeFlvFileHeader(FILE *pOutFile, const ByteBuffer_t &metadata, const uint8_t audio=1, const uint8_t video=1);
     void updateBootstrapInfo(const F4VBootstrapInfoBox &iBox, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected);
@@ -43,6 +49,9 @@ private:
     static const uint32_t WGET_TIMEOUT;
     
     bool m_bTerminate;
+    
+    std::string m_wgetCmd;
+    std::string m_mainUrl;
 };
 
 }

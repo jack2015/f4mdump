@@ -5,8 +5,11 @@
 #include <sstream> 
 #include <vector>
 
+#include "StringHelper.h"
 #include "ManifestParser.h"
 #include "F4mDownloader.h"
+#include "UdsDownloader.h"
+
 #include "console.h"
 #include "debug.h"
 
@@ -15,7 +18,9 @@ using namespace f4m;
 ////////////////////////////////////////////////////////
 // GLOBALS
 ///////////////////////////////////////////////////////
-CF4mDownloader g_downloader;
+CF4mDownloader g_F4mDownloader;
+CUDSDownloader g_UdsDownloader;
+bool terminated = false;
 
 void SigHandler (int signum)
 {
@@ -23,7 +28,9 @@ void SigHandler (int signum)
    signal(signum, SIG_IGN); 
    
    ConsoleAppContainer::getInstance().terminate();
-   g_downloader.terminate();
+   g_F4mDownloader.terminate();
+   g_UdsDownloader.terminate();
+   terminated = true;
 }
 
 int main(int argc, char *argv[])
@@ -34,7 +41,7 @@ int main(int argc, char *argv[])
     
     if(1 == argc)
     {
-        fprintf(stderr, "F4MDump v0.1\n");
+        fprintf(stderr, "F4MDump v0.2\n");
         fprintf(stderr, "(c) 2014 samsamsam@o2.pl\n");
         return 0;
     }
@@ -47,56 +54,57 @@ int main(int argc, char *argv[])
     }
     
     std::string wget(argv[1]);
-    std::string manifestUrl(argv[2]);
-    
+    std::string maniUrl(argv[2]);
     if(3 == argc)
     {
-        try
+        bool bRet = false;
+        std::string streamInfo;
+        if(g_UdsDownloader.canHandleUrl(maniUrl))
         {
-            printDBG("Qualities report only\n");
-            std::stringstream cmd;
-            cmd << "{ \"qualities\":[";
-            CManifestParser parser(wget);
-            parser.parseManifest(manifestUrl);
-            std::vector<int32_t> allBitrates = parser.getAllBitrates();
-            for(uint32_t i=0; i < allBitrates.size(); ++i)
-            {
-                cmd << allBitrates[i];
-                if(i < allBitrates.size()-1)
-                {
-                    cmd << ", ";
-                }
-            }
-            cmd << "] }";
-            fprintf(stderr, "%s\n", cmd.str().c_str());
+            g_UdsDownloader.initialize(maniUrl, wget);
+            bRet = g_UdsDownloader.reportStreamsInfo(streamInfo);
         }
-        catch(const char *err)
+        else if(g_F4mDownloader.canHandleUrl(maniUrl))
         {
-            fprintf(stderr, "%s\n", err);
-            return -1;
+            g_F4mDownloader.initialize(maniUrl, wget);
+            bRet = g_F4mDownloader.reportStreamsInfo(streamInfo);
         }
-        return 0;
+        fprintf(stderr, "%s\n", streamInfo.c_str());
+        return bRet ? 0 : -1;
     }
     
     std::string outFile(argv[3]);
     std::string tmpFile("");
-    int32_t bitrate = 0;
-    if(5 == argc)
-    {
-        bitrate = atoi(argv[4]);
-    }
-    
-    // download
     try
     {
-        g_downloader.download(wget, manifestUrl, outFile, tmpFile, bitrate);
+        if(g_UdsDownloader.canHandleUrl(maniUrl))
+        {
+            if(5 == argc)
+            {
+                g_UdsDownloader.initialize(maniUrl, wget);
+                g_UdsDownloader.downloadWithoutTmpFile(wget, outFile, argv[4] );
+            }
+            else
+            {
+                printDBG("Wrong number of parameters. 5 is needed for UdsDownloader\n");
+            }
+        }
+        else
+        {
+            int32_t bitrate = 0;
+            if(5 == argc)
+            {
+                bitrate = CStringHelper::aton<int32_t>(argv[4]);
+            }
+            // download
+            g_F4mDownloader.download(wget, maniUrl, outFile, tmpFile, bitrate);
+        }
     }
     catch(const char *err)
     {
         fprintf(stderr, "%s\n", err);
         return -1;
     }
-
     
     return 0;
 }

@@ -154,7 +154,7 @@ bool CManifestParser::parseManifest(const string &mainUrl)
             const char *value = pXmlElem->Attribute("bitrate");
             if(value && CStringHelper::is_number(value))
             {
-                bitrate = CStringHelper::atoi(value);
+                bitrate = CStringHelper::aton<int32_t>(value);
             }
         }
         // get attribute href
@@ -266,7 +266,7 @@ bool CManifestParser::addMediaEntries(const std::string &url,
             const char *value = pMediaElem->Attribute("bitrate");
             if(value && CStringHelper::is_number(value))
             {
-                mediaEntry.bitrate = CStringHelper::atoi(value);
+                mediaEntry.bitrate = CStringHelper::aton<int32_t>(value);
             }
             else
             {

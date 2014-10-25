@@ -6,13 +6,6 @@
  ****************************************************************************/
 using namespace std;
 
-int32_t CStringHelper::atoi(const string &strNum)
-{
-    int32_t numb = 0;
-    istringstream ( strNum ) >> numb;
-    return numb;
-}
-
 bool CStringHelper::is_number(const string &inStr)
 {
     string::const_iterator it = inStr.begin();
@@ -72,5 +65,32 @@ string CStringHelper::trim(const string& str,
     return str.substr(strBegin, strRange);
 }
 
+void CStringHelper::replaceAll(std::string& str, const std::string& from, const std::string& to)
+{
+    if(from.empty())
+    {
+        return;
+    }
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != std::string::npos)
+    {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+}
+
+void CStringHelper::replace(std::string& str, const std::string& from, const std::string& to)
+{
+    size_t start_pos = str.find(from);
+    if(start_pos != std::string::npos)
+    {  
+        str.replace(start_pos, from.length(), to);
+    }
+}
+
+bool CStringHelper::startsWith(const std::string& haystack, const std::string& needle)
+{
+    return (0 == haystack.find(needle)) ? true : false;
+}
 
 

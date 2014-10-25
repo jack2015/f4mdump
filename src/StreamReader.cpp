@@ -145,7 +145,7 @@ int64_t CBufferReader::seek(int32_t offset, EOffsetwhence whence)
     case READER_SEEK_CUR:
     {
         int64_t newOffset = m_offset + offset;
-        if(newOffset <= m_size && newOffset > 0)
+        if(newOffset <= m_size && newOffset >= 0)
         {
             m_offset = newOffset;
             ret = newOffset;
@@ -155,7 +155,7 @@ int64_t CBufferReader::seek(int32_t offset, EOffsetwhence whence)
     case READER_SEEK_END:
     {
         int64_t newOffset = m_size + m_offset;
-        if(newOffset < m_size && newOffset > 0)
+        if(newOffset <= m_size && newOffset >= 0)
         {
             m_offset = newOffset;
             ret = newOffset;

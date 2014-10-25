@@ -10,6 +10,8 @@
 #include "debug.h"
 #include "console.h"
 
+#include <vector>
+
 /*****************************************************************************
  * Using namespace(s)
  ****************************************************************************/
@@ -59,15 +61,14 @@ void LogError(const string msg)
 
 std::string StringFormat(const char* fmt, ...) 
 {
-    char textString[1024];
-    memset(textString, '\0', sizeof(textString));
+    static char textString[4096];
 
     va_list args;
-    va_start ( args, fmt );
-    vsnprintf ( textString, sizeof(textString), fmt, args );
-    va_end ( args );
-    std::string retStr = textString;
-    return retStr;
+    va_start( args, fmt );
+    vsnprintf( textString, sizeof(textString), fmt, args );
+    va_end( args );
+    //std::string retStr = textString;
+    return textString;
 }
 
 bool ReadWholeFile(const string &filePath, ByteBuffer_t &buffer)

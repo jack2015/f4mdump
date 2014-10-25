@@ -1,6 +1,8 @@
 #ifndef SULGE_F4M_DEBUG
 #define SULGE_F4M_DEBUG
 
+#include <cstdio>
+
 //#define DEBUG
 
 #ifdef DEBUG

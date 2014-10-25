@@ -45,6 +45,46 @@ CF4mDownloader::~CF4mDownloader()
 {
 }
 
+void CF4mDownloader::initialize(const std::string &mainUrl, const std::string &wgetCmd)
+{
+    m_wgetCmd = wgetCmd;
+    m_mainUrl = mainUrl;
+}
+
+bool CF4mDownloader::canHandleUrl(const std::string &url)
+{
+    return true;
+}
+
+bool CF4mDownloader::reportStreamsInfo(std::string &streamInfo)
+{
+    try
+    {
+        printDBG("Qualities report only\n");
+        std::stringstream cmd;
+        cmd << "{ \"qualities\":[";
+        CManifestParser parser(m_wgetCmd);
+        parser.parseManifest(m_mainUrl);
+        std::vector<int32_t> allBitrates = parser.getAllBitrates();
+        for(uint32_t i=0; i < allBitrates.size(); ++i)
+        {
+            cmd << allBitrates[i];
+            if(i < allBitrates.size()-1)
+            {
+                cmd << ", ";
+            }
+        }
+        cmd << "] }";
+        streamInfo = cmd.str();
+    }
+    catch(const char *err)
+    {
+        fprintf(stderr, "%s\n", err);
+        return false;
+    }
+    return true;
+}
+
 void CF4mDownloader::writeUInt24(FILE *pOutFile, const uint32_t &value)
 {
     const uint8_t *ptr = reinterpret_cast<const uint8_t*>(&value);
