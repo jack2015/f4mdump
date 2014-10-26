@@ -114,6 +114,7 @@ bool CUDSDownloader::reportStreamsInfo(std::string &streamInfo)
         m_lastStreamsInfo = getStreamsInfo("recorded");
     }
     streamInfo = dumpStreamsInfoList(m_lastStreamsInfo);
+    return true;
 }
 
 void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected)

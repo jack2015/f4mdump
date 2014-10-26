@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
     
     if(1 == argc)
     {
-        fprintf(stderr, "F4MDump v0.2\n");
+        fprintf(stderr, "F4MDump v0.21\n");
         fprintf(stderr, "(c) 2014 samsamsam@o2.pl\n");
         return 0;
     }
