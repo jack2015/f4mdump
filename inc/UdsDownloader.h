@@ -43,14 +43,14 @@ public:
     
     virtual bool canHandleUrl(const std::string &url);
     
-    virtual bool reportStreamsInfo(std::string &streamInfo);
+    virtual bool reportStreamsInfo(std::string &streamInfo, const uint32_t maxTries=10);
 
     virtual void downloadWithoutTmpFile( const std::string &baseWgetCmd, const std::string &outFile, const std::string &fragmentUrl );
 
-    StreamsInfoList_t getStreamsInfo(const std::string &app="channel");
+    StreamsInfoList_t getStreamsInfo(const std::string &app="channel", const uint32_t maxTries=1);
         
 protected:
-    void updateInfo(const std::string &fragmentUrl, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected);
+    void updateInfo(const std::string &fragmentUrl, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected, const uint32_t maxTries=1);
     
     std::string getFragmentHash(const uint32_t currentFragment);
     

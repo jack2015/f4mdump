@@ -79,7 +79,7 @@ bool CF4mDownloader::reportStreamsInfo(std::string &streamInfo)
     }
     catch(const char *err)
     {
-        fprintf(stderr, "%s\n", err);
+        printExc("%s\n", err);
         return false;
     }
     return true;
@@ -336,7 +336,7 @@ void CF4mDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                 }
                 
                 // report progress
-                fprintf(stderr, "{ \"total_download_size\":%llu }\n", totalDownloadSize);
+                printInf("{ \"total_download_size\":%llu }\n", totalDownloadSize);
                 
                 
                 if( isLive && !isEndPresentationDetected && IsHttpUrl(media.bootstrapUrl) && currentFragment == lastFragment)

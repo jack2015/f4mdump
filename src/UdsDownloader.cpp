@@ -19,6 +19,8 @@
 #include "F4mProcessor.h"
 #include "UdsDownloader.h"
 
+extern bool terminated;
+
 namespace f4m
 {
 using namespace std;
@@ -103,25 +105,25 @@ bool CUDSDownloader::canHandleUrl(const std::string &url)
     return (std::string::npos != url.find(USTREAM_DOMAIN)) ? true : false;
 }
 
-bool CUDSDownloader::reportStreamsInfo(std::string &streamInfo)
+bool CUDSDownloader::reportStreamsInfo(std::string &streamInfo, const uint32_t maxTries/*=10*/)
 {
     if(m_bLive)
     {
-        m_lastStreamsInfo = getStreamsInfo("channel");
+        m_lastStreamsInfo = getStreamsInfo("channel", maxTries);
     }
     else if(m_bRecorded)
     {
-        m_lastStreamsInfo = getStreamsInfo("recorded");
+        m_lastStreamsInfo = getStreamsInfo("recorded", maxTries);
     }
     streamInfo = dumpStreamsInfoList(m_lastStreamsInfo);
     return true;
 }
 
-void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected)
+void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected, const uint32_t maxTries/*=1*/)
 {
     ChunksRangeList_t hashItemsList;
     
-    StreamsInfoList_t streamInfoList = getStreamsInfo("channel");
+    StreamsInfoList_t streamInfoList = getStreamsInfo("channel", maxTries);
     StreamsInfoList_t::iterator tmpIt = streamInfoList.begin();
     
     while(tmpIt != streamInfoList.end())
@@ -218,7 +220,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
             bool isEndPresentationDetected = false; 
             uint32_t currentFragment  = static_cast<uint32_t>(-1);
             uint32_t lastFragment     = 0;
-            updateInfo(fragmentUrl, currentFragment, lastFragment, isEndPresentationDetected);
+            updateInfo(fragmentUrl, currentFragment, lastFragment, isEndPresentationDetected, 20);
             
             printDBG("currentFragment [%d] lastFragment[%d]\n", currentFragment, lastFragment);
             /*
@@ -244,7 +246,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                     inData.clear();
                     errData.clear();
                     retval = ConsoleAppContainer::getInstance().execute(cmd.str().c_str(), inData, errData);
-                    fprintf(stderr, "Downloading [%d] [%s]\n", currentFragment, getFragmentHash(currentFragment).c_str());
+                    printDBG("Downloading [%d] [%s]\n", currentFragment, getFragmentHash(currentFragment).c_str());
                     /* first, segments from the list can be no longer available 
                      * when we start downloading live stream, simple they will be skipped :) 
                      */
@@ -280,11 +282,11 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                                 inData.m_data[reader.offset()+1] = ptr[2];
                                 inData.m_data[reader.offset()+2] = ptr[1];
                                 inData.m_data[reader.offset()+3] = ptr[0];
-                                fprintf(stderr, "%s, \"action\":\"correcting packet\"}\n", errorInfo.c_str());
+                                printInf("%s, \"action\":\"correcting packet\"}\n", errorInfo.c_str());
                             }
                             else
                             {
-                                fprintf(stderr, "%s, \"action\":\"skipping packet\"}\n", errorInfo.c_str());
+                                printInf("%s, \"action\":\"skipping packet\"}\n", errorInfo.c_str());
                                 break;
                             }
                         }
@@ -373,7 +375,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                 }
                 
                 // report progress
-                fprintf(stderr, "{ \"total_download_size\":%llu }\n", totalDownloadSize);
+                printInf("{ \"total_download_size\":%llu }\n", totalDownloadSize);
                 
                 if( isLive && !isEndPresentationDetected &&  2 > (lastFragment - currentFragment))
                 {
@@ -387,20 +389,20 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                         }
                         catch(const char *err)
                         {
-                            printf("error [%s]\n", err);
+                            printExc("error [%s]\n", err);
                         }
                         
                         if(isEndPresentationDetected || newLastFragment > lastFragment)
                         {
                             lastFragment    = newLastFragment;
-                            printf("OK currentFragment[%d] isEndPresentationDetected[%d]\n", currentFragment, isEndPresentationDetected);
+                            printDBG("OK currentFragment[%d] isEndPresentationDetected[%d]\n", currentFragment, isEndPresentationDetected);
                             break;
                         }
                         else
                         {
                             ::sleep(1);
                         }
-                        fprintf(stderr, "retry [%d] [%d] \n", newLastFragment, currentFragment);
+                        printDBG("retry [%d] [%d] \n", newLastFragment, currentFragment);
                     }
                     while(!m_bTerminate && currentFragment == lastFragment);
                 }
@@ -416,128 +418,141 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
     }
 }
 
-StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channel*/)
+StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channel*/, const uint32_t maxTries/*=1*/)
 {
     StreamsInfoList_t streamInfoList;
-    string swfUrl(LIVE_SWF_URL);
-    string pageUrl(m_mainUrl);
-    string rtmpUrl = StringFormat(RTMP_URL.c_str(), randint(0, 0xffffff), m_mediaId.c_str());
-    
-    printDBG("CUDSDownloader::getStreamsInfo rtmpUrl[%s]\n", rtmpUrl.c_str());
-    
-    RTMPOptionsList_t rtmpParams;
-    rtmpParams.push_back(RTMPOption_t("pageUrl", pageUrl));
-    rtmpParams.push_back(RTMPOption_t("swfUrl", swfUrl));
-    rtmpParams.push_back(RTMPOption_t("conn", "O:1"));
-    rtmpParams.push_back(RTMPOption_t("conn", string("NS:application:")+app));
-    rtmpParams.push_back(RTMPOption_t("conn", string("NS:media:")+m_mediaId));
-    rtmpParams.push_back(RTMPOption_t("conn", string("NS:password:")+m_password));
-    rtmpParams.push_back(RTMPOption_t("conn", "O:0"));
+
     try
     {
+        int32_t tries = 0;
         printDBG("%s %d\n", __FUNCTION__, __LINE__);
-        CRTMP conn(rtmpUrl, rtmpParams);
-        conn.connect();
-        RTMPList *list = conn.handleServerInvoke("moduleInfo", (uint32_t)-1);
-        conn.close();
-        
-        bool bError = false;
-        if(list)
+        while(0 == streamInfoList.size() && maxTries > tries && !terminated )
         {
-            printDBG("->|%s, %d\n", __FUNCTION__, __LINE__);
-            RTMPItems *pStream = 0;
-            if(GetListItem(list, "stream",  pStream))
+            string swfUrl(LIVE_SWF_URL);
+            string pageUrl(m_mainUrl);
+            string rtmpUrl = StringFormat(RTMP_URL.c_str(), randint(0, 0xffffff), m_mediaId.c_str());
+            
+            printDBG("CUDSDownloader::getStreamsInfo rtmpUrl[%s]\n", rtmpUrl.c_str());
+            
+            RTMPOptionsList_t rtmpParams;
+            rtmpParams.push_back(RTMPOption_t("pageUrl", pageUrl));
+            rtmpParams.push_back(RTMPOption_t("swfUrl", swfUrl));
+            rtmpParams.push_back(RTMPOption_t("conn", "O:1"));
+            rtmpParams.push_back(RTMPOption_t("conn", string("NS:application:")+app));
+            rtmpParams.push_back(RTMPOption_t("conn", string("NS:media:")+m_mediaId));
+            rtmpParams.push_back(RTMPOption_t("conn", string("NS:password:")+m_password));
+            rtmpParams.push_back(RTMPOption_t("conn", "O:0"));
+            ++tries;
+            try
             {
-                for(RTMPItems::iterator provider=pStream->begin(); !bError &&  provider!=pStream->end(); ++provider)
+                CRTMP conn(rtmpUrl, rtmpParams);
+                conn.connect();
+                RTMPList *list = conn.handleServerInvoke("moduleInfo", 2);
+                conn.close();
+                
+                bool bError = false;
+                if(list)
                 {
-                    CStreamInfo infoItem;
-                    
-                    GetStringItem(*provider, "url", infoItem.provUrl);
-                    GetStringItem(*provider, "name", infoItem.provName);
-                    
-                    RTMPItems *pStreams = 0;
-                    if(GetListItem(*provider, "streams",  pStreams))
+                    printDBG("->|%s, %d\n", __FUNCTION__, __LINE__);
+                    RTMPItems *pStream = 0;
+                    if(GetListItem(list, "stream",  pStream))
                     {
-                        uint32_t idx=0;
-                        for(RTMPItems::iterator streamInfo=pStreams->begin(); !bError &&  streamInfo!=pStreams->end(); ++streamInfo)
+                        for(RTMPItems::iterator provider=pStream->begin(); !bError &&  provider!=pStream->end(); ++provider)
                         {
-                            double tmp = 0;
-                            GetNumberItem(*streamInfo, "chunkId", tmp);
-                            infoItem.chunkId = static_cast<uint64_t>(tmp);
-                            GetNumberItem(*streamInfo, "offset", tmp);
-                            infoItem.chunkOffset = static_cast<uint64_t>(tmp);
+                            CStreamInfo infoItem;
                             
-                            GetStringItem(*streamInfo, "streamName", infoItem.chunkName);
+                            GetStringItem(*provider, "url", infoItem.provUrl);
+                            GetStringItem(*provider, "name", infoItem.provName);
                             
-                            RTMPItems *pChanks = 0;
-                            if(GetListItem(*streamInfo, "chunkRange",  pChanks))
+                            RTMPItems *pStreams = 0;
+                            if(GetListItem(*provider, "streams",  pStreams))
                             {
-                                for(RTMPItems::iterator chank=pChanks->begin(); chank!=pChanks->end(); ++chank)
+                                uint32_t idx=0;
+                                for(RTMPItems::iterator streamInfo=pStreams->begin(); !bError &&  streamInfo!=pStreams->end(); ++streamInfo)
                                 {
-                                    ChunksRangeItem_t tmp;
-                                    GetStringItem((*chank), tmp.second);
-                                    tmp.first = CStringHelper::aton<uint64_t>((*chank)->getName().c_str());
-                                    if(infoItem.chunksRange.end() == std::find(infoItem.chunksRange.begin(), infoItem.chunksRange.end(), tmp))
+                                    double tmp = 0;
+                                    GetNumberItem(*streamInfo, "chunkId", tmp);
+                                    infoItem.chunkId = static_cast<uint64_t>(tmp);
+                                    GetNumberItem(*streamInfo, "offset", tmp);
+                                    infoItem.chunkOffset = static_cast<uint64_t>(tmp);
+                                    
+                                    GetStringItem(*streamInfo, "streamName", infoItem.chunkName);
+                                    
+                                    RTMPItems *pChanks = 0;
+                                    if(GetListItem(*streamInfo, "chunkRange",  pChanks))
                                     {
-                                        infoItem.chunksRange.push_back(tmp);
+                                        for(RTMPItems::iterator chank=pChanks->begin(); chank!=pChanks->end(); ++chank)
+                                        {
+                                            ChunksRangeItem_t tmp;
+                                            GetStringItem((*chank), tmp.second);
+                                            tmp.first = CStringHelper::aton<uint64_t>((*chank)->getName().c_str());
+                                            if(infoItem.chunksRange.end() == std::find(infoItem.chunksRange.begin(), infoItem.chunksRange.end(), tmp))
+                                            {
+                                                infoItem.chunksRange.push_back(tmp);
+                                            }
+                                        }
                                     }
+                                    GetNumberItem(*streamInfo, "height", infoItem.streamHeight);
+                                    GetStringItem(*streamInfo, "description", infoItem.streamName);
+                                    
+                                    if( 0 == infoItem.streamName.size() )
+                                    {
+                                        if( 0 < infoItem.streamHeight )
+                                        {
+                                            bool isTranscoded = false;
+                                            GetBoolItem(*streamInfo, "isTranscoded", isTranscoded);
+                                            if( isTranscoded )
+                                            {
+                                                infoItem.streamName = StringFormat("%llup+", static_cast<uint64_t>(infoItem.streamHeight));
+                                            }
+                                            else
+                                            {
+                                                infoItem.streamName = StringFormat("%llup", static_cast<uint64_t>(infoItem.streamHeight));
+                                            }
+                                        }
+                                        else
+                                        {
+                                            infoItem.streamName = "live";
+                                        }
+                                    }
+                                    StreamsInfoList_t::iterator it = streamInfoList.begin();
+                                    for(; it != streamInfoList.end(); ++it)
+                                    {
+                                        if(it->streamName == infoItem.streamName)
+                                        {
+                                            std::string provNameClean = infoItem.provName;
+                                            CStringHelper::replaceAll(provNameClean, "uhs_", "");
+                                            infoItem.streamName += StringFormat("_alt_%s", provNameClean.c_str());
+                                            break;
+                                        }
+                                    }
+                                    streamInfoList.push_back(infoItem);
+                                    ++idx;
                                 }
                             }
-                            GetNumberItem(*streamInfo, "height", infoItem.streamHeight);
-                            GetStringItem(*streamInfo, "description", infoItem.streamName);
-                            
-                            if( 0 == infoItem.streamName.size() )
+                            else
                             {
-                                if( 0 < infoItem.streamHeight )
-                                {
-                                    bool isTranscoded = false;
-                                    GetBoolItem(*streamInfo, "isTranscoded", isTranscoded);
-                                    if( isTranscoded )
-                                    {
-                                        infoItem.streamName = StringFormat("%llup+", static_cast<uint64_t>(infoItem.streamHeight));
-                                    }
-                                    else
-                                    {
-                                        infoItem.streamName = StringFormat("%llup", static_cast<uint64_t>(infoItem.streamHeight));
-                                    }
-                                }
-                                else
-                                {
-                                    infoItem.streamName = "live";
-                                }
+                                printDBG("Problem with getting pStreamInfo\n");
+                                bError = true;
+                                break;
                             }
-                            StreamsInfoList_t::iterator it = streamInfoList.begin();
-                            for(; it != streamInfoList.end(); ++it)
-                            {
-                                if(it->streamName == infoItem.streamName)
-                                {
-                                    std::string provNameClean = infoItem.provName;
-                                    CStringHelper::replaceAll(provNameClean, "uhs_", "");
-                                    infoItem.streamName += StringFormat("_alt_%s", provNameClean.c_str());
-                                    break;
-                                }
-                            }
-                            streamInfoList.push_back(infoItem);
-                            ++idx;
                         }
                     }
                     else
                     {
-                        printDBG("Problem with getting pStreamInfo\n");
-                        bError = true;
-                        break;
+                        printDBG("Problem with getting stream info\n");
                     }
+                    delete list;
+                }
+                else
+                {
+                    printDBG("Problem with getting module info\n");
                 }
             }
-            else
+            catch(const char *err)
             {
-                printDBG("Problem with getting stream info\n");
+                printExc("Exception[%s]\n", err);
             }
-            delete list;
-        }
-        else
-        {
-            printDBG("Problem with getting module info\n");
         }
     }
     catch(const char *err)

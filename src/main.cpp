@@ -41,8 +41,8 @@ int main(int argc, char *argv[])
     
     if(1 == argc)
     {
-        fprintf(stderr, "F4MDump v0.21\n");
-        fprintf(stderr, "(c) 2014 samsamsam@o2.pl\n");
+        printInf("F4MDump v0.22\n");
+        printInf("(c) 2014 samsamsam@o2.pl\n");
         return 0;
     }
     
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
             g_F4mDownloader.initialize(maniUrl, wget);
             bRet = g_F4mDownloader.reportStreamsInfo(streamInfo);
         }
-        fprintf(stderr, "%s\n", streamInfo.c_str());
+        printInf("%s\n", streamInfo.c_str());
         return bRet ? 0 : -1;
     }
     
@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
     }
     catch(const char *err)
     {
-        fprintf(stderr, "%s\n", err);
+        printExc("%s\n", err);
         return -1;
     }
     

@@ -105,6 +105,7 @@ CRTMP::CRTMP(const std::string &rtmpUrl, const RTMPOptionsList_t &rtmpParams)
 , m_rtmp(0)
 , m_rtmpParams(rtmpParams)
 {
+    RTMP_LogSetOutput(stdout);
     m_rtmp = RTMP_Alloc();
     if(0 == m_rtmp)
     {
@@ -194,7 +195,7 @@ void CRTMP::startInternalTimeout(const uint32_t timeout)
 
 bool CRTMP::isInternalTimeout()
 {
-    if((time(0) - m_startInternalTimeout) >= m_startInternalTimeout)
+    if((time(0) - m_startInternalTimeout) >= m_internalTimeout)
     {
         m_bInternalTimeout = true;
     }
@@ -281,14 +282,15 @@ RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t
     {
         if(cleanUp)
         {
+            RTMP_ClientPacket(m_rtmp, &rtmpPacket);
             RTMPPacket_Free(&rtmpPacket);
             memset(&rtmpPacket, 0, sizeof(RTMPPacket));
         }
+        cleanUp = true;
         if(!read_packet(rtmpPacket))
         {
             break;
         }
-        cleanUp = true;
 
         // OK we have here rtmpPacket
         if(RTMP_PACKET_TYPE_INVOKE == rtmpPacket.m_packetType)
@@ -297,7 +299,7 @@ RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t
             if (0 == rtmpPacket.m_nBodySize || rtmpPacket.m_body[0] != 0x02)
             {
                 printDBG("%s, Sanity failed. no string method in invoke packet\n", __FUNCTION__);
-                break;
+                continue;
             }
             
             // decode_amf
@@ -312,20 +314,18 @@ RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t
             AVal method;
             AMFProp_GetString(AMF_GetProp(&obj, NULL, 0), &method);
             
-            printDBG("%s, invoking <%s>\n", __FUNCTION__, method.av_val);
+            printDBG("%s, invoking <%s> <%s>\n", __FUNCTION__, method.av_val, strMethod.c_str());
             if(string(method.av_val, method.av_len) == strMethod)
             {
+                printDBG("OK\n");
                 AMFObject cobj;
                 AMFProp_GetObject(AMF_GetProp(&obj, NULL, 3), &cobj);
                 objList = getAllProperties(cobj, std::string(obj.o_props[3].p_name.av_val, obj.o_props[3].p_name.av_len));
-                if(0 != objList)
-                {
-                    AMF_Reset(&obj);
-                    break;
-                }
+                AMF_Reset(&obj);
+                break;
             }
-            AMF_Reset(&obj);
             RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+            AMF_Reset(&obj);
         }
         else
         {

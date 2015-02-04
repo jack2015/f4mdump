@@ -10,6 +10,7 @@ extern "C"
 {
 #include <librtmp/rtmp.h>
 #include <librtmp/amf.h>
+#include <librtmp/log.h>
 }
 
 namespace rtmp
@@ -215,9 +216,9 @@ public:
     
     virtual RTMPList* handleServerInvoke(const std::string &strMethod, const uint32_t timeout=static_cast<uint32_t>(-1));
     
+    bool isConnected();
 private:
     void set_option(const std::string &key, const std::string &value);
-    bool isConnected();
     bool read_packet(RTMPPacket &rtmpPacket);
 
     void startInternalTimeout(const uint32_t timeout);
