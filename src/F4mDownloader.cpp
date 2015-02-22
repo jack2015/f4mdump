@@ -183,7 +183,7 @@ void CF4mDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
             uint32_t lastFragment     = 0;
             updateBootstrapInfo(bootstrapInfoBox, currentFragment, lastFragment, isEndPresentationDetected);
             printDBG("currentFragment [%d] lastFragment[%d]\n", currentFragment, lastFragment);
-            if(isLive && !isEndPresentationDetected)
+            if(isLive && !isEndPresentationDetected ) //&& 1 != getSegmentNum(bootstrapInfoBox, currentFragment) )
             {
                 currentFragment = (10 < lastFragment) ? lastFragment-10 : lastFragment;
             }
@@ -194,7 +194,7 @@ void CF4mDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
             {
                 // prepare cmd
                 std::stringstream cmd;
-                cmd << baseWgetCmd << " --tries=0 --timeout=" << WGET_TIMEOUT << " -O - " << '"' << downloadUrlBase << "Seg1" << "-Frag" << currentFragment << '"';
+                cmd << baseWgetCmd << " --tries=0 --timeout=" << WGET_TIMEOUT << " -O - " << '"' << downloadUrlBase << "Seg" << getSegmentNum(bootstrapInfoBox, currentFragment) << "-Frag" << currentFragment << '"';
                 
                 // download fragment
                 uint32_t tries = 0;
@@ -338,7 +338,6 @@ void CF4mDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                 // report progress
                 printInf("{ \"total_download_size\":%llu }\n", totalDownloadSize);
                 
-                
                 if( isLive && !isEndPresentationDetected && IsHttpUrl(media.bootstrapUrl) && currentFragment == lastFragment)
                 {
                     // wait for new fragment 
@@ -356,23 +355,24 @@ void CF4mDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                             ReadBootstrapInfobox(bufferReader, newBootstrapInfoBox);
                             dumpDBG(newBootstrapInfoBox);
                             updateBootstrapInfo(newBootstrapInfoBox, currentFragment, newLastFragment, isEndPresentationDetected);
+                            bootstrapInfoBox = newBootstrapInfoBox;
                         }
                         catch(const char *err)
                         {
-                            printf("error [%s]\n", err);
+                            printDBG("error [%s]\n", err);
                         }
                         
                         if(isEndPresentationDetected || newLastFragment > lastFragment)
                         {
                             lastFragment    = newLastFragment;
-                            printf("OK currentFragment[%d] isEndPresentationDetected[%d]\n", currentFragment, isEndPresentationDetected);
+                            printDBG("OK currentFragment[%d] isEndPresentationDetected[%d]\n", currentFragment, isEndPresentationDetected);
                             break;
                         }
                         else
                         {
                             ::sleep(1);
                         }
-                        printf("retry [%d] [%d] \n", newLastFragment, currentFragment);
+                        printDBG("retry [%d] [%d] \n", newLastFragment, currentFragment);
                     }
                 }
                 ++currentFragment;
@@ -392,6 +392,37 @@ void CF4mDownloader::terminate()
     m_bTerminate = true;
 }
 
+uint32_t CF4mDownloader::getSegmentNum(const F4VBootstrapInfoBox &iBox, const uint32_t &iCurrentFragment)
+{
+    uint32_t oSegForFrag = 1; // default value when only fragment mode is used
+    
+    const F4VFragmentRunTableBox &fragmentRunTableItem = iBox.fragmentRunTableEntries[0];
+    const FragmentRunEntryArray_t &fragTable = fragmentRunTableItem.fragmentRunEntryTable;
+    
+    const F4VSegmentRunTableBox &segmentRunTableItem = iBox.segmentRunTableEntries[0];
+    const F4VSegmentRunEntryArray_t &segTable = segmentRunTableItem.segmentRunEntryTable;
+    
+    if(1 == fragTable.size() && 1 < segTable.size())
+    {
+        uint32_t fragment = fragTable[0].firstFragment;
+        for(F4VSegmentRunEntryArray_t::const_iterator it = segTable.begin(); it != segTable.end(); ++it)
+        {
+                if(fragment < iCurrentFragment)
+                {
+                    oSegForFrag = it->firstSegment;
+                }
+                fragment += it->fragmentsPerSegment;
+                if(fragment > iCurrentFragment)
+                {
+                    break;
+                }
+        }
+    }
+    printDBG("getSegmentNum SegForFrag oSegForFrag[%u] ->  iCurrentFragment[%u]\n", oSegForFrag, iCurrentFragment);
+    
+    return oSegForFrag;
+}
+
 void CF4mDownloader::updateBootstrapInfo(const F4VBootstrapInfoBox &iBox, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected)
 {
     uint32_t firstFragment    = static_cast<uint32_t>(-1);
@@ -399,23 +430,65 @@ void CF4mDownloader::updateBootstrapInfo(const F4VBootstrapInfoBox &iBox, uint32
 
     const F4VFragmentRunTableBox &runTableItem = iBox.fragmentRunTableEntries[0];
     const FragmentRunEntryArray_t &fragTable = runTableItem.fragmentRunEntryTable;
-    for(FragmentRunEntryArray_t::const_iterator it = fragTable.begin(); it != fragTable.end(); ++it)
+    
+    const F4VSegmentRunTableBox &segmentRunTableItem = iBox.segmentRunTableEntries[0];
+    const F4VSegmentRunEntryArray_t &segTable = segmentRunTableItem.segmentRunEntryTable;
+    
+    
+    if(1 == fragTable.size() && 1 < segTable.size())
     {
-        if(0 == it->fragmentDuration && 0 == it->discontinuityIndicator)
+        uint64_t calcMediaTime = fragTable[0].firstFragmentTimestamp;
+        
+        if(0 == fragTable[0].fragmentDuration && 0 == fragTable[0].discontinuityIndicator)
         {
             isEndPresentationDetected = true;
             printDBG("CF4mDownloader::downloadWithoutTmpFile end presentation fragment detected\n");
         }
         else
         {
-            if(firstFragment > it->firstFragment)
-            {
-                firstFragment = it->firstFragment; 
-            }
             
-            if(lastFragment < it->firstFragment)
+            uint64_t fagDuration   = fragTable[0].fragmentDuration;
+            
+            firstFragment = fragTable[0].firstFragment;
+            lastFragment = firstFragment;
+            for(F4VSegmentRunEntryArray_t::const_iterator it = segTable.begin(); it != segTable.end(); ++it)
             {
-                lastFragment = it->firstFragment; 
+                calcMediaTime += it->fragmentsPerSegment * fagDuration;
+                lastFragment += it->fragmentsPerSegment ;
+                
+                if(calcMediaTime > iBox.currentMediaTime)
+                {
+                    for(uint32_t i=0; i<it->fragmentsPerSegment && calcMediaTime > iBox.currentMediaTime; ++i)
+                    {
+                        calcMediaTime -= fagDuration;
+                        --lastFragment;
+                    }
+                    break;
+                }
+            }
+        }
+        printDBG("calcMediaTime[%llu] currentMediaTime[%llu] firstFragment[%u] lastFragment[%u]\n", calcMediaTime, iBox.currentMediaTime, firstFragment, lastFragment);
+    }
+    else
+    {
+        for(FragmentRunEntryArray_t::const_iterator it = fragTable.begin(); it != fragTable.end(); ++it)
+        {
+            if(0 == it->fragmentDuration && 0 == it->discontinuityIndicator)
+            {
+                isEndPresentationDetected = true;
+                printDBG("CF4mDownloader::downloadWithoutTmpFile end presentation fragment detected\n");
+            }
+            else
+            {
+                if(firstFragment > it->firstFragment)
+                {
+                    firstFragment = it->firstFragment; 
+                }
+                
+                if(lastFragment < it->firstFragment)
+                {
+                    lastFragment = it->firstFragment; 
+                }
             }
         }
     }

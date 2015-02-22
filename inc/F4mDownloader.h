@@ -1,6 +1,7 @@
 #ifndef _F4M_DOWNLOADER_H_
 #define _F4M_DOWNLOADER_H_
 
+#include <list>
 #include <string>
 #include "SimpleDataTypes.h"
 #include "F4mProcessor.h"
@@ -31,6 +32,7 @@ public:
 protected:
     void writeUInt24(FILE *pOutFile, const uint32_t &value);
     void writeFlvFileHeader(FILE *pOutFile, const ByteBuffer_t &metadata, const uint8_t audio=1, const uint8_t video=1);
+    uint32_t getSegmentNum(const F4VBootstrapInfoBox &iBox, const uint32_t &iCurrentFragment);
     void updateBootstrapInfo(const F4VBootstrapInfoBox &iBox, uint32_t &oCurrentFragment, uint32_t &oLastFragment, bool &isEndPresentationDetected);
 
     static const uint32_t TAG_HEADER_LEN;
