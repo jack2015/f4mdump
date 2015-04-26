@@ -76,10 +76,10 @@ struct F4VBootstrapInfoBox
     FragmentRunTableBoxArray_t fragmentRunTableEntries;
 };
 
-void ReadFragmentRunTableBox(IStreamReader &buffer, F4VFragmentRunTableBox &box);
-void ReadSegmentRunTableBox(IStreamReader &buffer, F4VSegmentRunTableBox &box);
-void ReadBootstrapInfobox(IStreamReader &buffer, F4VBootstrapInfoBox &box);
-void ReadBoxHeader(IStreamReader &buffer, F4VBoxHeader &header);
+void ReadFragmentRunTableBox(iptv::IStreamReader &buffer, F4VFragmentRunTableBox &box);
+void ReadSegmentRunTableBox(iptv::IStreamReader &buffer, F4VSegmentRunTableBox &box);
+void ReadBootstrapInfobox(iptv::IStreamReader &buffer, F4VBootstrapInfoBox &box);
+void ReadBoxHeader(iptv::IStreamReader &buffer, F4VBoxHeader &header);
 
 void dumpDBG(const F4VBoxHeader &box);
 void dumpDBG(const F4VBootstrapInfoBox &box);

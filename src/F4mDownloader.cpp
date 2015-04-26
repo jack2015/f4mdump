@@ -17,6 +17,7 @@
 namespace f4m
 {
 using namespace tinyxml2;
+using namespace iptv;
 
 /**************************************************************************************************
  * Constant and globals variables
@@ -115,7 +116,7 @@ void CF4mDownloader::writeFlvFileHeader(FILE *pOutFile, const ByteBuffer_t &meta
         throw "Something wrong happen with writing FLV metadata!";
     }
     {
-        uint8_t buff[] = {0x00, 0x00, 0x01, metadata.size() + TAG_HEADER_LEN};
+        uint8_t buff[] = {0x00, 0x00, 0x01, static_cast<uint8_t>(metadata.size() + TAG_HEADER_LEN) };
         if(sizeof(buff) != fwrite(buff, sizeof(buff[1]), sizeof(buff), pOutFile))
             throw "Something wrong happen with writing FLV header C!";
     }

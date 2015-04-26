@@ -3,6 +3,7 @@
 
 namespace f4m
 {
+using namespace iptv;
 
 void ReadFragmentRunTableBox(IStreamReader &buffer, F4VFragmentRunTableBox &box)
 {

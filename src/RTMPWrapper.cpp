@@ -1,100 +1,125 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <memory>
+#include <assert.h>
+
 #include "debug.h"
 #include "RTMPWrapper.h"
+#include "RTMPTypes.h"
 
-#define ASSERT(x)
 
 namespace rtmp
 {
 
 using namespace std;
 
-bool GetStringItem(RTMPItem *valueItem, std::string &value)
+bool GetStringItem(std::shared_ptr<RTMPItem> valueItem, std::string &value)
 {
     bool bRet = false;
-    if(valueItem && RTMP_STRING_TYPE == valueItem->getType())
+    if(valueItem.get() && RTMP_STRING_TYPE == valueItem->getType())
     {
-        value = static_cast<RTMPString *>(valueItem)->getValue();
+        value = std::static_pointer_cast<RTMPString >(valueItem)->getValue();
         bRet = true;
     }
     return bRet;
 }
-
-bool GetStringItem(RTMPItem *rtmpItem, const std::string &name, std::string &value)
+ 
+bool GetStringItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, std::string &value)
 {
     bool bRet = false;
     value = "";
-    if(rtmpItem && RTMP_LIST_TYPE == rtmpItem->getType())
+    if(rtmpItem.get() && RTMP_LIST_TYPE == rtmpItem->getType())
     {
-        bRet = GetStringItem((*static_cast<RTMPList *>(rtmpItem))[name], value);
+        bRet = GetStringItem((*std::static_pointer_cast<RTMPList >(rtmpItem))[name], value);
     }
     return bRet;
 }
-
-bool GetNumberItem(RTMPItem *valueItem, double &value)
+ 
+bool GetNumberItem(std::shared_ptr<RTMPItem> valueItem, double &value)
 {
     bool bRet = false;
-    if(valueItem && RTMP_NUMBER_TYPE == valueItem->getType())
+    if(valueItem.get() && RTMP_NUMBER_TYPE == valueItem->getType())
     {
-        value = static_cast<RTMPNumber *>(valueItem)->getValue();
+        value = std::static_pointer_cast<RTMPNumber >(valueItem)->getValue();
         bRet = true;
     }
     return bRet;
 }
-
-bool GetNumberItem(RTMPItem *rtmpItem, const std::string &name, double &value)
+ 
+bool GetNumberItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, double &value)
 {
     bool bRet = false;
     value = 0.0;
     if(rtmpItem && RTMP_LIST_TYPE == rtmpItem->getType())
     {
-        bRet = GetNumberItem((*static_cast<RTMPList *>(rtmpItem))[name], value);
+        bRet = GetNumberItem((*std::static_pointer_cast<RTMPList >(rtmpItem))[name], value);
     }
     return bRet;
 }
 
-bool GetBoolItem(RTMPItem *valueItem, bool &value)
+bool GetIntegerItem(std::shared_ptr<RTMPItem> valueItem, int32_t &value)
 {
     bool bRet = false;
-    if(valueItem && RTMP_BOOLEAN_TYPE == valueItem->getType())
+    if(valueItem.get() && RTMP_INTEGER_TYPE == valueItem->getType())
     {
-        value = static_cast<RTMPNumber *>(valueItem)->getValue();
+        value = std::static_pointer_cast<RTMPInteger >(valueItem)->getValue();
         bRet = true;
     }
     return bRet;
 }
-
-bool GetBoolItem(RTMPItem *rtmpItem, const std::string &name, bool &value)
+ 
+bool GetIntegerItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, int32_t &value)
+{
+    bool bRet = false;
+    value = 0.0;
+    if(rtmpItem && RTMP_LIST_TYPE == rtmpItem->getType())
+    {
+        bRet = GetIntegerItem((*std::static_pointer_cast<RTMPList >(rtmpItem))[name], value);
+    }
+    return bRet;
+}
+ 
+bool GetBoolItem(std::shared_ptr<RTMPItem> valueItem, bool &value)
+{
+    bool bRet = false;
+    if(valueItem.get() && RTMP_BOOLEAN_TYPE == valueItem->getType())
+    {
+        value = std::static_pointer_cast<RTMPBool >(valueItem)->getValue();
+        bRet = true;
+    }
+    return bRet;
+}
+ 
+bool GetBoolItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, bool &value)
 {
     bool bRet = false;
     value = false;
     if(rtmpItem && RTMP_LIST_TYPE == rtmpItem->getType())
     {
-        bRet = GetBoolItem((*static_cast<RTMPList *>(rtmpItem))[name], value);
+        bRet = GetBoolItem((*std::static_pointer_cast<RTMPList >(rtmpItem))[name], value);
     }
     return bRet;
 }
-
-bool GetListItem(RTMPItem *valueItem, RTMPItems *&value)
+ 
+bool GetListItem(std::shared_ptr<RTMPItem> valueItem, RTMPItems *&value)
 {
     bool bRet = false;
     if(valueItem && RTMP_LIST_TYPE == valueItem->getType())
     {
-        value = &(static_cast<RTMPList *>(valueItem)->getValue());
+        value = &(std::static_pointer_cast<RTMPList >(valueItem)->getValue());
         bRet = true;
     }
     return bRet;
 }
-
-bool GetListItem(RTMPItem *rtmpItem, const std::string &name, RTMPItems *&value)
+ 
+bool GetListItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, RTMPItems *&value)
 {
     bool bRet = false;
     // ASSERT(value);
     if(rtmpItem && RTMP_LIST_TYPE == rtmpItem->getType())
     {
-        bRet = GetListItem((*static_cast<RTMPList *>(rtmpItem))[name], value);
+        bRet = GetListItem((*std::static_pointer_cast<RTMPList >(rtmpItem))[name], value);
     }
     return bRet;
 }
@@ -123,7 +148,7 @@ CRTMP::CRTMP(const std::string &rtmpUrl, const RTMPOptionsList_t &rtmpParams)
 
 CRTMP::~CRTMP()
 {
-    ASSERT(m_rtmp);
+    assert(m_rtmp);
     close();
     RTMP_Free(m_rtmp);
     m_rtmp = 0;
@@ -221,55 +246,9 @@ bool CRTMP::read_packet(RTMPPacket &rtmpPacket)
     return packetRead;
 }
 
- RTMPList* getAllProperties(AMFObject &obj, const std::string &name)
- {
-    RTMPList *objList = 0;
-    for(int i=0; i<obj.o_num; ++i)
-    {
-        RTMPItem *item = 0;
-        std::string tmpName(obj.o_props[i].p_name.av_val, obj.o_props[i].p_name.av_len);
-        switch(obj.o_props[i].p_type)
-        {
-        case AMF_OBJECT:
-        case AMF_STRICT_ARRAY:
-            {
-                AMFObject tmpObj;
-                memset(&tmpObj, 0, sizeof(tmpObj));
-                AMFProp_GetObject(AMF_GetProp(&obj, NULL, i), &tmpObj);
-                item = getAllProperties(tmpObj, tmpName);
-            }
-        break;
-        case RTMP_BOOLEAN_TYPE:
-        case AMF_NUMBER:
-            {
-                item = new RTMPNumber(tmpName, obj.o_props[i].p_vu.p_number);
-            }
-        break;
-        case AMF_STRING:
-            {
-                item = new RTMPString(tmpName, std::string(obj.o_props[i].p_vu.p_aval.av_val, obj.o_props[i].p_vu.p_aval.av_len));
-            }
-        break;
-        default:
-            printDBG("------------------------------------>%s, ignored item: p_name[%s] type[%x]\n", __FUNCTION__, obj.o_props[i].p_name.av_val, obj.o_props[i].p_type);
-        }
-        
-        if(0 == objList && 0 != item)
-        {
-            objList = new RTMPList(name);
-        }
-        
-        if(0 != objList && 0 != item)
-        {
-            objList->append(item);
-        }
-    }
-    return objList;
- }
-
-RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t timeout)
+std::shared_ptr<RTMPList> CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t timeout)
 {
-    RTMPList *objList = 0;
+    std::shared_ptr<RTMPList> objList;
     
     startInternalTimeout(timeout);
     RTMPPacket rtmpPacket;
@@ -303,29 +282,32 @@ RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t
             }
             
             // decode_amf
-            AMFObject obj;
-            int nRes = AMF_Decode(&obj, rtmpPacket.m_body, rtmpPacket.m_nBodySize, 0);
-            if(nRes < 0)
-            {
-              printDBG("%s, error decoding invoke packet\n", __FUNCTION__);
-              continue;
-            }
-
-            AVal method;
-            AMFProp_GetString(AMF_GetProp(&obj, NULL, 0), &method);
+            CRTMPAMFDecoder decoder;
             
-            printDBG("%s, invoking <%s> <%s>\n", __FUNCTION__, method.av_val, strMethod.c_str());
-            if(string(method.av_val, method.av_len) == strMethod)
+            std::shared_ptr<RTMPList> tmpObjList = decoder.parse(rtmpPacket);
+            
+            std::shared_ptr<RTMPString> method = std::dynamic_pointer_cast<RTMPString>((*tmpObjList)[0]);
+            std::shared_ptr<RTMPNumber> transaction_id = std::dynamic_pointer_cast<RTMPNumber>((*tmpObjList)[1]);
+            
+            //printDBG("SULGE >>>>>>>>>> size[%u] [%u] [%u]\n", (unsigned)tmpObjList->getValue().size(), (unsigned)GetStringItem((*tmpObjList)[0], method), (unsigned)(*tmpObjList)[1]->getType()); 
+            if(tmpObjList && 2 < tmpObjList->getValue().size() && 
+               method.get() && transaction_id.get() )
             {
-                printDBG("OK\n");
-                AMFObject cobj;
-                AMFProp_GetObject(AMF_GetProp(&obj, NULL, 3), &cobj);
-                objList = getAllProperties(cobj, std::string(obj.o_props[3].p_name.av_val, obj.o_props[3].p_name.av_len));
-                AMF_Reset(&obj);
-                break;
+                printDBG("%s, invoking <%s>\n", __FUNCTION__, method->getValue().c_str());
+                if(method->getValue() == strMethod && 3 < tmpObjList->getValue().size())
+                {
+                    objList = std::dynamic_pointer_cast<RTMPList>((*tmpObjList)[3]);
+                    break;
+                }
             }
-            RTMP_ClientPacket(m_rtmp, &rtmpPacket);
-            AMF_Reset(&obj);
+            else
+            {
+                continue;
+            }
+            if( 1.0 != transaction_id->getValue() )
+            {
+                RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+            }
         }
         else
         {
@@ -343,4 +325,3 @@ RTMPList* CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t
 }
 
 } /* namespace rtmp*/
-

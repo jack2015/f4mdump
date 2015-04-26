@@ -5,6 +5,10 @@
 #include <unistd.h>
 #include <string.h>
 #include "SimpleDataTypes.h"
+#include "StreamReader.h"
+
+namespace iptv
+{
 
 enum EOffsetwhence
 {
@@ -22,16 +26,20 @@ public:
     virtual int64_t offset() = 0;
     
     virtual uint8_t  readUInt8();
+    virtual uint16_t readUInt16();
     virtual uint32_t readUInt24();
     virtual uint32_t readUInt32();
     virtual uint64_t readUInt64();
+    virtual double   readDouble();
     virtual std::string readString();
+    virtual std::string readString(const uint32_t len);
 };
 
 class CBufferReader : public IStreamReader
 {
 public:
     CBufferReader(const ByteBuffer_t &buffer);
+    CBufferReader(const uint8_t *pBuffer, const uint32_t size);
     virtual ~CBufferReader();
     
     virtual int64_t read(void *buf, uint32_t count);
@@ -39,10 +47,12 @@ public:
     virtual int64_t size();
     virtual int64_t offset();
 private:
-    const ByteBuffer_t &m_buffer;
-    int64_t     m_size;
-    int64_t     m_offset;
+    const uint8_t *m_pBuffer;
+    const int64_t  m_size;
+          int64_t  m_offset;
     
+};
+
 };
 
 

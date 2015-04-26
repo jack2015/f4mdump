@@ -4,6 +4,7 @@
 #include <map>
 #include <list>
 #include <string>
+#include <memory>
 #include "RTMPWrapper.h"
 
 extern "C"
@@ -21,11 +22,14 @@ enum RTMPObjectType
     RTMP_NUMBER_TYPE = 0,
     RTMP_BOOLEAN_TYPE,
     RTMP_STRING_TYPE,
-    RTMP_LIST_TYPE
+    RTMP_LIST_TYPE,
+    RTMP_NULL_TYPE,
+    RTMP_INTEGER_TYPE,
+    RTMP_OBJECTEND_TYPE
 };
 
 class RTMPItem;
-typedef std::list<RTMPItem*> RTMPItems;
+typedef std::list< std::shared_ptr<RTMPItem> > RTMPItems;
 
 class RTMPItem
 {
@@ -47,10 +51,84 @@ protected:
     
 };
 
+class RTMPInteger : public RTMPItem
+{
+public:
+    RTMPInteger(const std::string &name, const int32_t value)
+    : RTMPItem(name)
+    , m_value(value)
+    {  }
+    
+    virtual ~RTMPInteger()
+    {
+        //printDBG("->| destroy[%d] [%s]\n", getType(), getName().c_str());
+    }
+    
+    int32_t getValue()
+    {
+        return m_value;
+    }
+    
+    virtual RTMPObjectType getType()
+    {
+        return RTMP_INTEGER_TYPE;
+    }
+    
+private:
+    int32_t m_value;
+};
+
+class RTMPNull : public RTMPItem
+{
+public:
+    RTMPNull(const std::string &name)
+    : RTMPItem(name)
+    {
+    }
+    
+    virtual ~RTMPNull()
+    {
+        //printDBG("->| destroy[%d] [%s]\n", getType(), getName().c_str());
+    }
+    
+    void getValue()
+    {
+    }
+    
+    virtual RTMPObjectType getType()
+    {
+        return RTMP_NULL_TYPE;
+    }
+}; 
+
+class RTMPObjEnd : public RTMPItem
+{
+public:
+    RTMPObjEnd(const std::string &name)
+    : RTMPItem(name)
+    {
+    }
+    
+    virtual ~RTMPObjEnd()
+    {
+        //printDBG("->| destroy[%d] [%s]\n", getType(), getName().c_str());
+    }
+    
+    void getValue()
+    {
+    }
+    
+    virtual RTMPObjectType getType()
+    {
+        return RTMP_OBJECTEND_TYPE;
+    }
+}; 
+
+
 class RTMPBool : public RTMPItem
 {
 public:
-    RTMPBool(const std::string &name, const double value)
+    RTMPBool(const std::string &name, const bool value)
     : RTMPItem(name)
     , m_value(value)
     {
@@ -139,10 +217,6 @@ public:
     
     virtual ~RTMPList()
     {
-        for(RTMPItems::iterator it = m_items.begin(); it != m_items.end(); ++it)
-        {
-            delete (*it);
-        }
         //printDBG("->| destroy[%d] [%s]\n", getType(), getName().c_str());
     }
     
@@ -156,17 +230,17 @@ public:
         return m_items;
     }
 
-    virtual void append(RTMPItem *item)
+    virtual void append(std::shared_ptr<RTMPItem> item)
     {
-        if(0 != item)
+        if(0 != item.get())
         {
             m_items.push_back(item);
         }
     }
     
-    virtual RTMPItem* operator[](const std::string &name)
+    virtual std::shared_ptr<RTMPItem> operator[](const std::string &name)
     {
-        RTMPItem *obj = 0;
+        std::shared_ptr<RTMPItem> obj;
         for(RTMPItems::iterator it = m_items.begin(); it != m_items.end(); ++it)
         {
             if((*it)->getName() == name)
@@ -178,19 +252,36 @@ public:
         return obj;
     }
     
+    virtual std::shared_ptr<RTMPItem> operator[](const uint32_t &idx)
+    {
+        std::shared_ptr<RTMPItem> obj;
+        uint32_t i = 0;
+        for(RTMPItems::iterator it = m_items.begin(); it != m_items.end(); ++it)
+        {
+            if(idx == i)
+            {
+                obj = (*it);
+                break;
+            }
+            ++i;
+        }
+        return obj;
+    }
 private:
     RTMPItems m_items;
 };
 
-bool GetStringItem(RTMPItem *rtmpItem, std::string &value);
-bool GetNumberItem(RTMPItem *rtmpItem, double &value);
-bool GetBoolItem(RTMPItem *rtmpItem, bool &value);
-bool GetListItem(RTMPItem *rtmpItem, RTMPItems *&value);
-bool GetStringItem(RTMPItem *rtmpItem, const std::string &name, std::string &value);
-bool GetNumberItem(RTMPItem *rtmpItem, const std::string &name, double &value);
-bool GetBoolItem(RTMPItem *rtmpItem, const std::string &name, bool &value);
-bool GetListItem(RTMPItem *rtmpItem, const std::string &name, RTMPItems *&value);
+bool GetStringItem(std::shared_ptr<RTMPItem> valueItem, std::string &value);
+bool GetStringItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, std::string &value);
+bool GetNumberItem(std::shared_ptr<RTMPItem> valueItem, double &value);
+bool GetNumberItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, double &value);
+bool GetBoolItem(std::shared_ptr<RTMPItem> valueItem, bool &value);
+bool GetBoolItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, bool &value);
+bool GetListItem(std::shared_ptr<RTMPItem> valueItem, RTMPItems *&value);
+bool GetListItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, RTMPItems *&value);
 
+bool GetIntegerItem(std::shared_ptr<RTMPItem> valueItem, int32_t &value);
+bool GetIntegerItem(std::shared_ptr<RTMPItem> rtmpItem, const std::string &name, int32_t &value);
 
 typedef std::pair< std::string, std::string>    RTMPOption_t;       //first key, second value
 typedef std::list< RTMPOption_t >               RTMPOptionsList_t;   //first key, second value
@@ -214,7 +305,7 @@ public:
     
     virtual void set_option(const RTMPOption_t &option);
     
-    virtual RTMPList* handleServerInvoke(const std::string &strMethod, const uint32_t timeout=static_cast<uint32_t>(-1));
+    virtual std::shared_ptr<RTMPList> handleServerInvoke(const std::string &strMethod, const uint32_t timeout=static_cast<uint32_t>(-1));
     
     bool isConnected();
 private:

@@ -25,6 +25,7 @@ namespace f4m
 {
 using namespace std;
 using namespace rtmp;
+using namespace iptv;
 
 /**************************************************************************************************
  * Constant and globals variables
@@ -33,7 +34,7 @@ const std::string CUDSDownloader::USTREAM_DOMAIN = "ustream.tv";
 const std::string CUDSDownloader::LIVE_SWF_URL   = "http://static-cdn1.ustream.tv/swf/live/viewer.rsl:505.swf";
 const std::string CUDSDownloader::EMBED_PAGE_URL = "https://www.ustream.tv/embed/";
 const std::string CUDSDownloader::RECORDED_URL   = "http://tcdn.ustream.tv/video/";
-const std::string CUDSDownloader::RTMP_URL       = "rtmp://r%u.1.%s.channel.live.ums.ustream.tv:80/ustream";
+const std::string CUDSDownloader::RTMP_URL       = "rtmp://r%u-1-%s.channel-live.ums.ustream.tv:1935/ustream"; //"rtmp://r%u.1.%s.channel.live.ums.ustream.tv:80/ustream"; 
 const uint32_t    CUDSDownloader::MAX_RETRIES    = 10; // maximum number of retry downloading fragment before given up
 
 static uint32_t randint(const uint32_t a, const uint32_t b)
@@ -182,7 +183,7 @@ std::string CUDSDownloader::getFragmentHash(const uint32_t currentFragment)
     }
     if(0 < currHashItem.second.size())
     {
-        m_chunksHashList.push_front(currHashItem); // has for current fragment may be used for next one
+        m_chunksHashList.push_front(currHashItem); // hash for current fragment may be used for next one
     }
     
     return currHashItem.second;
@@ -447,13 +448,13 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
             {
                 CRTMP conn(rtmpUrl, rtmpParams);
                 conn.connect();
-                RTMPList *list = conn.handleServerInvoke("moduleInfo", 2);
+                std::shared_ptr<RTMPList> list = conn.handleServerInvoke("moduleInfo", 2);
                 conn.close();
                 
                 bool bError = false;
-                if(list)
+                if(list.get())
                 {
-                    printDBG("->|%s, %d\n", __FUNCTION__, __LINE__);
+                    //printDBG("->|%s, %d size[%u] l[%s] l[%s] l[%s] l[%s]\n", __FUNCTION__, __LINE__, list->getValue().size(), (*list)[0]->getName().c_str(), (*list)[1]->getName().c_str(), (*list)[2]->getName().c_str(), (*list)[3]->getName().c_str());
                     RTMPItems *pStream = 0;
                     if(GetListItem(list, "stream",  pStream))
                     {
@@ -471,10 +472,24 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
                                 for(RTMPItems::iterator streamInfo=pStreams->begin(); !bError &&  streamInfo!=pStreams->end(); ++streamInfo)
                                 {
                                     double tmp = 0;
-                                    GetNumberItem(*streamInfo, "chunkId", tmp);
-                                    infoItem.chunkId = static_cast<uint64_t>(tmp);
-                                    GetNumberItem(*streamInfo, "offset", tmp);
-                                    infoItem.chunkOffset = static_cast<uint64_t>(tmp);
+                                    int32_t tmp2 = 0;
+                                    if( GetNumberItem(*streamInfo, "chunkId", tmp) )
+                                    {
+                                        infoItem.chunkId = static_cast<uint64_t>(tmp);
+                                    }
+                                    else if( GetIntegerItem(*streamInfo, "chunkId", tmp2) )
+                                    {
+                                        infoItem.chunkId = static_cast<uint64_t>(tmp2);
+                                    }
+                                    
+                                    if(GetNumberItem(*streamInfo, "offset", tmp))
+                                    {
+                                        infoItem.chunkOffset = static_cast<uint64_t>(tmp);
+                                    }
+                                    else if( GetIntegerItem(*streamInfo, "offset", tmp2) )
+                                    {
+                                        infoItem.chunkOffset = static_cast<uint64_t>(tmp2);
+                                    }
                                     
                                     GetStringItem(*streamInfo, "streamName", infoItem.chunkName);
                                     
@@ -492,7 +507,16 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
                                             }
                                         }
                                     }
-                                    GetNumberItem(*streamInfo, "height", infoItem.streamHeight);
+                                    
+                                    if(GetNumberItem(*streamInfo, "height", tmp))
+                                    {
+                                        infoItem.streamHeight = tmp;
+                                    }
+                                    else if( GetIntegerItem(*streamInfo, "height", tmp2) )
+                                    {
+                                        infoItem.streamHeight = static_cast<double>(tmp2);
+                                    }
+                                    
                                     GetStringItem(*streamInfo, "description", infoItem.streamName);
                                     
                                     if( 0 == infoItem.streamName.size() )
@@ -540,9 +564,14 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
                     }
                     else
                     {
+                        std::string offline;
+                        if( GetStringItem(list, "stream", offline) && offline == "offline")
+                        {
+                            break;
+                        }
                         printDBG("Problem with getting stream info\n");
                     }
-                    delete list;
+                    
                 }
                 else
                 {

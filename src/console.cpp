@@ -54,7 +54,10 @@ int bidirpipe(int pfd[], const char *cmd , const char * const argv[], const char
 
         if (cwd)
         {
-            chdir(cwd);
+            if( chdir(cwd) == -1)
+            {
+                printDBG("bidirpipe chdir to cwd[%s] failed\n", cwd);
+            }
         }
 
         execvp(cmd, (char * const *)argv);
