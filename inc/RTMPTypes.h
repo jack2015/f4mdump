@@ -113,6 +113,7 @@ private:
     
     std::shared_ptr<RTMPList> parseScriptDataObject(const std::string &name);
     std::shared_ptr<RTMPList> parseScriptDataStrictArray(const std::string &name);
+    std::shared_ptr<RTMPList> parseScriptDataECMAArray(const std::string &name);
     
     iptv::CBufferReader *m_reader;
     

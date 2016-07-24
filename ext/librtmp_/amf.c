@@ -33,7 +33,6 @@
 #include "bytes.h"
 
 static const AMFObjectProperty AMFProp_Invalid = { {0, 0}, AMF_INVALID };
-static const AMFObject AMFObj_Invalid = { 0, 0 };
 static const AVal AV_empty = { 0, 0 };
 
 /* Data is Big-Endian */
@@ -341,19 +340,13 @@ AMFProp_GetBoolean(AMFObjectProperty *prop)
 void
 AMFProp_GetString(AMFObjectProperty *prop, AVal *str)
 {
-  if (prop->p_type == AMF_STRING)
-    *str = prop->p_vu.p_aval;
-  else
-    *str = AV_empty;
+  *str = prop->p_vu.p_aval;
 }
 
 void
 AMFProp_GetObject(AMFObjectProperty *prop, AMFObject *obj)
 {
-  if (prop->p_type == AMF_OBJECT)
-    *obj = prop->p_vu.p_object;
-  else
-    *obj = AMFObj_Invalid;
+  *obj = prop->p_vu.p_object;
 }
 
 int
@@ -478,8 +471,6 @@ AMF3ReadString(const char *data, AVal *str)
       RTMP_Log(RTMP_LOGDEBUG,
 	  "%s, string reference, index: %d, not supported, ignoring!",
 	  __FUNCTION__, refIndex);
-	  str->av_val = NULL;
-	  str->av_len = 0;
       return len;
     }
   else
@@ -519,11 +510,9 @@ AMF3Prop_Decode(AMFObjectProperty *prop, const char *pBuffer, int nSize,
       if (name.av_len <= 0)
 	return nRes;
 
-      nSize -= nRes;
-      if (nSize <= 0)
-	return -1;
       prop->p_name = name;
       pBuffer += nRes;
+      nSize -= nRes;
     }
 
   /* decode */
@@ -609,8 +598,6 @@ AMF3Prop_Decode(AMFObjectProperty *prop, const char *pBuffer, int nSize,
 	  __FUNCTION__, (unsigned char)(*pBuffer), pBuffer);
       return -1;
     }
-  if (nSize < 0)
-    return -1;
 
   return nOriginalSize - nSize;
 }
@@ -1005,17 +992,9 @@ AMF_DecodeArray(AMFObject *obj, const char *pBuffer, int nSize,
       int nRes;
       nArrayLen--;
 
-      if (nSize <= 0)
-	{
-	  bError = TRUE;
-	  break;
-	}
       nRes = AMFProp_Decode(&prop, pBuffer, nSize, bDecodeName);
       if (nRes == -1)
-	{
-	  bError = TRUE;
-	  break;
-	}
+	bError = TRUE;
       else
 	{
 	  nSize -= nRes;
@@ -1074,12 +1053,12 @@ AMF3_Decode(AMFObject *obj, const char *pBuffer, int nSize, int bAMFData)
       else
 	{
 	  int32_t classExtRef = (classRef >> 1);
-	  int i, cdnum;
+	  int i;
 
 	  cd.cd_externalizable = (classExtRef & 0x1) == 1;
 	  cd.cd_dynamic = ((classExtRef >> 1) & 0x1) == 1;
 
-	  cdnum = classExtRef >> 2;
+	  cd.cd_num = classExtRef >> 2;
 
 	  /* class name */
 
@@ -1094,16 +1073,9 @@ AMF3_Decode(AMFObject *obj, const char *pBuffer, int nSize, int bAMFData)
 	      cd.cd_name.av_val, cd.cd_externalizable, cd.cd_dynamic,
 	      cd.cd_num);
 
-	  for (i = 0; i < cdnum; i++)
+	  for (i = 0; i < cd.cd_num; i++)
 	    {
 	      AVal memberName;
-	      if (nSize <=0)
-		{
-invalid:
-		  RTMP_Log(RTMP_LOGDEBUG, "%s, invalid class encoding!",
-		    __FUNCTION__);
-		  return nOriginalSize;
-		}
 	      len = AMF3ReadString(pBuffer, &memberName);
 	      RTMP_Log(RTMP_LOGDEBUG, "Member: %s", memberName.av_val);
 	      AMF3CD_AddProp(&cd, &memberName);
@@ -1139,8 +1111,6 @@ invalid:
 	  int nRes, i;
 	  for (i = 0; i < cd.cd_num; i++)	/* non-dynamic */
 	    {
-	      if (nSize <=0)
-	        goto invalid;
 	      nRes = AMF3Prop_Decode(&prop, pBuffer, nSize, FALSE);
 	      if (nRes == -1)
 		RTMP_Log(RTMP_LOGDEBUG, "%s, failed to decode AMF3 property!",
@@ -1158,8 +1128,6 @@ invalid:
 
 	      do
 		{
-		  if (nSize <=0)
-		    goto invalid;
 		  nRes = AMF3Prop_Decode(&prop, pBuffer, nSize, TRUE);
 		  AMF_AddProp(obj, &prop);
 
@@ -1209,18 +1177,10 @@ AMF_Decode(AMFObject *obj, const char *pBuffer, int nSize, int bDecodeName)
 
       nRes = AMFProp_Decode(&prop, pBuffer, nSize, bDecodeName);
       if (nRes == -1)
-	{
-	  bError = TRUE;
-	  break;
-	}
+	bError = TRUE;
       else
 	{
 	  nSize -= nRes;
-	  if (nSize < 0)
-	    {
-	      bError = TRUE;
-	      break;
-	    }
 	  pBuffer += nRes;
 	  AMF_AddProp(obj, &prop);
 	}

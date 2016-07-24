@@ -8,6 +8,7 @@
 #include "RTMPWrapper.h"
 #include "RTMPTypes.h"
 
+extern "C" int WriteN(RTMP *r, const char *buffer, int n);
 
 namespace rtmp
 {
@@ -129,6 +130,7 @@ CRTMP::CRTMP(const std::string &rtmpUrl, const RTMPOptionsList_t &rtmpParams)
 , m_rtmpUrl(rtmpUrl)
 , m_rtmp(0)
 , m_rtmpParams(rtmpParams)
+, m_numInvokes(0)
 {
     RTMP_LogSetOutput(stdout);
     m_rtmp = RTMP_Alloc();
@@ -227,6 +229,17 @@ bool CRTMP::isInternalTimeout()
     return m_bInternalTimeout;
 }
 
+bool CRTMP::send_packet(RTMPPacket &rtmpPacket, const bool block/*=true*/)
+{
+    /* FixMe check transmission block -> to queue */
+    if( RTMP_SendPacket(m_rtmp, &rtmpPacket, block ? 1 : 0) )
+    {
+        return true;
+    }
+    return false;
+}
+
+
 bool CRTMP::read_packet(RTMPPacket &rtmpPacket)
 {
     bool packetRead = false;
@@ -243,7 +256,62 @@ bool CRTMP::read_packet(RTMPPacket &rtmpPacket)
             break;
         }
     }
+    printDBG("%s, m_nBodySize [%u]\n", __FUNCTION__, static_cast<uint32_t>(rtmpPacket.m_nBodySize));
     return packetRead;
+}
+
+bool CRTMP::remotePlayingMethod(const bool bPlayparm, const std::string &m_mediaId)
+{
+  RTMPPacket packet;
+  char strBuf[128] = "playing";
+  char strBuf2[128] = "reason";
+  char pbuf[1024];
+  AVal strVal;
+  AVal strName;
+  char *pend = pbuf + sizeof(pbuf);
+  char *enc;
+  memset(pbuf, 0x00, sizeof(pbuf));
+  packet.m_nChannel = 0x03;	/* control channel (invoke) */
+  packet.m_headerType = RTMP_PACKET_SIZE_MEDIUM;
+  packet.m_packetType = RTMP_PACKET_TYPE_INVOKE;
+  packet.m_nTimeStamp = 0;
+  packet.m_nInfoField2 = 0;
+  packet.m_hasAbsTimestamp = 0;
+  packet.m_body = pbuf + RTMP_MAX_HEADER_SIZE;
+
+  enc = packet.m_body;
+  strVal.av_val = strBuf;
+  strVal.av_len = strlen(strBuf);
+  
+  enc = AMF_EncodeString(enc, pend, &strVal);
+  enc = AMF_EncodeNumber(enc, pend, ++m_numInvokes);
+  *enc++ = AMF_NULL;
+  
+  memcpy(strBuf, m_mediaId.c_str(), m_mediaId.size());
+  strVal.av_val = strBuf;
+  strVal.av_len = m_mediaId.size();
+  enc = AMF_EncodeString(enc, pend, &strVal);
+  enc = AMF_EncodeBoolean(enc, pend, static_cast<int>(bPlayparm));
+
+//
+  *enc++ = AMF_ECMA_ARRAY;
+  *enc++ = 0;
+  *enc++ = 0;
+  *enc++ = 0;
+  *enc++ = AMF_OBJECT;
+  
+  strName.av_val = strBuf2;
+  strName.av_len = strlen(strBuf2);
+  strBuf[0] = '\0';
+  strVal.av_val = strBuf;
+  strVal.av_len = 0;
+  enc = AMF_EncodeNamedString(enc, pend, &strName, &strVal);
+  
+  *enc++ = 0;
+  *enc++ = 0;
+  *enc++ = AMF_OBJECT_END;
+  packet.m_nBodySize = enc - packet.m_body;
+  return send_packet(packet, false);
 }
 
 std::shared_ptr<RTMPList> CRTMP::handleServerInvoke(const std::string &strMethod, const uint32_t timeout)
@@ -257,15 +325,21 @@ std::shared_ptr<RTMPList> CRTMP::handleServerInvoke(const std::string &strMethod
     
     
     bool bRet = true;
+    bool handlePacket = false; 
     while(!m_bTerminate && isConnected() && !isInternalTimeout())
     {
         if(cleanUp)
         {
-            RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+            if(handlePacket)
+            {
+                printDBG("RTMP_ClientPacket\n");
+                RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+            }
             RTMPPacket_Free(&rtmpPacket);
             memset(&rtmpPacket, 0, sizeof(RTMPPacket));
         }
         cleanUp = true;
+        handlePacket = false;
         if(!read_packet(rtmpPacket))
         {
             break;
@@ -293,30 +367,36 @@ std::shared_ptr<RTMPList> CRTMP::handleServerInvoke(const std::string &strMethod
             if(tmpObjList && 2 < tmpObjList->getValue().size() && 
                method.get() && transaction_id.get() )
             {
-                printDBG("%s, invoking <%s>\n", __FUNCTION__, method->getValue().c_str());
+                printDBG("%s, invoking <%s> val<%f>\n", __FUNCTION__, method->getValue().c_str(), (float)transaction_id->getValue());
                 if(method->getValue() == strMethod && 3 < tmpObjList->getValue().size())
                 {
                     objList = std::dynamic_pointer_cast<RTMPList>((*tmpObjList)[3]);
                     break;
                 }
             }
+            /*
             else
             {
                 continue;
             }
+            */
             if( 1.0 != transaction_id->getValue() )
             {
-                RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+                handlePacket = true;
             }
         }
         else
         {
-            RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+            handlePacket = true;
         }
     }
     
     if(cleanUp)
     {
+        if(handlePacket)
+        {
+            RTMP_ClientPacket(m_rtmp, &rtmpPacket);
+        }
         RTMPPacket_Free(&rtmpPacket);
         memset(&rtmpPacket, 0, sizeof(RTMPPacket));
     }

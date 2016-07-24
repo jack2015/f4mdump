@@ -307,10 +307,13 @@ public:
     
     virtual std::shared_ptr<RTMPList> handleServerInvoke(const std::string &strMethod, const uint32_t timeout=static_cast<uint32_t>(-1));
     
+    virtual bool remotePlayingMethod(const bool bPlayparm, const std::string &m_mediaId);
+    
     bool isConnected();
 private:
     void set_option(const std::string &key, const std::string &value);
     bool read_packet(RTMPPacket &rtmpPacket);
+    bool send_packet(RTMPPacket &rtmpPacket, const bool block=true);
 
     void startInternalTimeout(const uint32_t timeout);
     bool isInternalTimeout();
@@ -324,7 +327,7 @@ private:
     std::string m_rtmpUrl;
     RTMPOptionsList_t m_rtmpParams;
     InvokeResults_t m_invoke_results;
-    
+    uint32_t m_numInvokes;
     
 };
 

@@ -30,11 +30,11 @@ using namespace iptv;
 /**************************************************************************************************
  * Constant and globals variables
  *************************************************************************************************/
-const std::string CUDSDownloader::USTREAM_DOMAIN = "ustream.tv";
-const std::string CUDSDownloader::LIVE_SWF_URL   = "http://static-cdn1.ustream.tv/swf/live/viewer.rsl:505.swf";
+const std::string CUDSDownloader::USTREAM_DOMAIN = "ustream.tv"; //"http://static-cdn1.ustream.tv/swf/live/viewer.rsl:505.swf"; //
+const std::string CUDSDownloader::LIVE_SWF_URL   = "http://static-cdn1.ustream.tv/swf/live/viewer.qrsl:65.swf?rmalang=en_US";
 const std::string CUDSDownloader::EMBED_PAGE_URL = "https://www.ustream.tv/embed/";
 const std::string CUDSDownloader::RECORDED_URL   = "http://tcdn.ustream.tv/video/";
-const std::string CUDSDownloader::RTMP_URL       = "rtmp://r%u-1-%s.channel-live.ums.ustream.tv:1935/ustream"; //"rtmp://r%u.1.%s.channel.live.ums.ustream.tv:80/ustream"; 
+const std::string CUDSDownloader::RTMP_URL       = "rtmp://r%u-1-%s-channel-live.ums.ustream.tv:1935/ustream"; //"rtmp://r%u.1.%s.channel.live.ums.ustream.tv:80/ustream"; 
 const uint32_t    CUDSDownloader::MAX_RETRIES    = 10; // maximum number of retry downloading fragment before given up
 
 static uint32_t randint(const uint32_t a, const uint32_t b)
@@ -61,11 +61,15 @@ static uint32_t randint(const uint32_t a, const uint32_t b)
 CUDSDownloader::CUDSDownloader()
 : m_bLive(false)
 , m_bRecorded(false)
+, m_pConn(NULL)
+, m_playingState(0)
 {
+    /* nothing to do here */
 }
 
 CUDSDownloader::~CUDSDownloader()
 {
+    /* nothing to do here */
 }
 
 void CUDSDownloader::initialize(const std::string &mainUrl, const std::string &wgetCmd)
@@ -127,11 +131,14 @@ void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurre
     StreamsInfoList_t streamInfoList = getStreamsInfo("channel", maxTries);
     StreamsInfoList_t::iterator tmpIt = streamInfoList.begin();
     
+    uint32_t chunkId = 0;
     while(tmpIt != streamInfoList.end())
     {
         if( fragmentUrl == (tmpIt->provUrl + tmpIt->chunkName) )
         {
             hashItemsList = tmpIt->chunksRange;
+            chunkId = tmpIt->chunkId;
+            m_chunksHashList.clear();
             break;
         }
         ++tmpIt;
@@ -144,15 +151,15 @@ void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurre
         ++newIt;
     }
     
-    m_chunksHashList.sort();
-    m_chunksHashList.unique();
-    
-    if(m_chunksHashList.size())
+    if(m_chunksHashList.size() && chunkId > 0)
     {
+        m_chunksHashList.sort();
+        m_chunksHashList.unique();
+    
         uint32_t firstFragment = m_chunksHashList.front().first;
         uint32_t lastFragment  = m_chunksHashList.back().first;
     
-        if(static_cast<uint32_t>(-1) == oCurrentFragment)
+        if(static_cast<uint32_t>(-1) == oCurrentFragment || oCurrentFragment < firstFragment)
         {
             oCurrentFragment = firstFragment;
         }
@@ -160,6 +167,11 @@ void CUDSDownloader::updateInfo(const std::string &fragmentUrl, uint32_t &oCurre
         if(oLastFragment < lastFragment)
         {
             oLastFragment = lastFragment; 
+        }
+        
+        if(oCurrentFragment > oLastFragment)
+        {
+            oCurrentFragment = oLastFragment;
         }
     }
 }
@@ -195,6 +207,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
     if(!m_bTerminate)
     {
         std::string downloadUrlBase = fragmentUrl;
+        CStringHelper::replace(downloadUrlBase, "https://", "http://");
         CStringHelper::replace(downloadUrlBase, "_%_", "_%u_");
         CStringHelper::replace(downloadUrlBase, "_%.", "_%s.");
         
@@ -219,6 +232,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
             bool isLive = m_bLive;
             printDBG("isLive [%d]\n", isLive);
             bool isEndPresentationDetected = false; 
+            bool forceUpdate = false;
             uint32_t currentFragment  = static_cast<uint32_t>(-1);
             uint32_t lastFragment     = 0;
             updateInfo(fragmentUrl, currentFragment, lastFragment, isEndPresentationDetected, 20);
@@ -373,12 +387,29 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                         printDBG("Download problem cmd[%s] errData[%s]\n", cmd.str().c_str(), errData.m_data.c_str());
                         throw "";
                     }
+                    else
+                    {
+                        forceUpdate = true;
+                    }
                 }
                 
+                if(totalDownloadSize > 0 && 0 == m_playingState)
+                {
+                    m_playingState = 1;
+                    if(m_pConn)
+                    {
+                        m_pConn->remotePlayingMethod(true, m_mediaId);
+                    }
+                }
                 // report progress
                 printInf("{ \"total_download_size\":%llu }\n", totalDownloadSize);
                 
-                if( isLive && !isEndPresentationDetected &&  2 > (lastFragment - currentFragment))
+                if(currentFragment < lastFragment)
+                {
+                    ++currentFragment;
+                }
+                
+                if( forceUpdate || (isLive && !isEndPresentationDetected /*&&  2 > (lastFragment - currentFragment)*/))
                 {
                     // wait for new fragment 
                     uint32_t newLastFragment = lastFragment;
@@ -386,7 +417,8 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                     {
                         try
                         {   
-                            updateInfo(fragmentUrl, currentFragment, newLastFragment, isEndPresentationDetected);
+                            uint32_t maxTries = (forceUpdate || currentFragment == lastFragment) ? 5 : 1; 
+                            updateInfo(fragmentUrl, currentFragment, newLastFragment, isEndPresentationDetected, maxTries);
                         }
                         catch(const char *err)
                         {
@@ -395,7 +427,7 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                         
                         if(isEndPresentationDetected || newLastFragment > lastFragment)
                         {
-                            lastFragment    = newLastFragment;
+                            lastFragment = newLastFragment;
                             printDBG("OK currentFragment[%d] isEndPresentationDetected[%d]\n", currentFragment, isEndPresentationDetected);
                             break;
                         }
@@ -407,7 +439,6 @@ void CUDSDownloader::downloadWithoutTmpFile( const std::string &baseWgetCmd, con
                     }
                     while(!m_bTerminate && currentFragment == lastFragment);
                 }
-                ++currentFragment;
             }
         }
         catch(const char *err)
@@ -440,17 +471,28 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
             rtmpParams.push_back(RTMPOption_t("swfUrl", swfUrl));
             rtmpParams.push_back(RTMPOption_t("conn", "O:1"));
             rtmpParams.push_back(RTMPOption_t("conn", string("NS:application:")+app));
-            rtmpParams.push_back(RTMPOption_t("conn", string("NS:media:")+m_mediaId));
             rtmpParams.push_back(RTMPOption_t("conn", string("NS:password:")+m_password));
+            rtmpParams.push_back(RTMPOption_t("conn", string("NS:media:")+m_mediaId));
             rtmpParams.push_back(RTMPOption_t("conn", "O:0"));
             ++tries;
             try
             {
-                CRTMP conn(rtmpUrl, rtmpParams);
-                conn.connect();
-                std::shared_ptr<RTMPList> list = conn.handleServerInvoke("moduleInfo", 2);
-                conn.close();
+                if( NULL != m_pConn && (!m_pConn->isConnected() || tries > 2) )
+                {
+                    printDBG("%s, restart connection\n", __FUNCTION__);
+                    delete m_pConn;
+                    m_pConn = NULL;
+                }
                 
+                if ( NULL == m_pConn )
+                {
+                    m_pConn = new CRTMP(rtmpUrl, rtmpParams);
+                    m_pConn->connect();
+                    m_playingState = 0;
+                    m_pConn->remotePlayingMethod(false, m_mediaId);
+                }
+                
+                std::shared_ptr<RTMPList> list = m_pConn->handleServerInvoke("moduleInfo", 10);
                 bool bError = false;
                 if(list.get())
                 {
@@ -463,6 +505,12 @@ StreamsInfoList_t CUDSDownloader::getStreamsInfo(const std::string &app/*=channe
                             CStreamInfo infoItem;
                             
                             GetStringItem(*provider, "url", infoItem.provUrl);
+                            if("" == infoItem.provUrl)
+                            {
+                                GetStringItem(*provider, "varnishUrl", infoItem.provUrl);
+                            }
+                            printDBG("%s %d stream provider [%s]\n", __FUNCTION__, __LINE__, infoItem.provUrl.c_str());
+                            
                             GetStringItem(*provider, "name", infoItem.provName);
                             
                             RTMPItems *pStreams = 0;

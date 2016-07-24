@@ -32,6 +32,16 @@ struct CStreamInfo
 
 typedef std::list<CStreamInfo> StreamsInfoList_t;
 
+/*
+enum UsdPlayingState_e
+{
+    eUSD_STOPPED = 0, //#0 is stopped, sending bool false
+    eUSD_WAITING = 1, //#1 is playing sent bool false, waiting for downloaded chunk
+    eUSD_READY   = 2, //#2 is chunk downloaded, ready to send bool true
+    eUSD_PLAING  = 3, //#3 is playing sent bool true
+};
+*/
+
 class CUDSDownloader : public f4m::CF4mDownloader
 {
 public:
@@ -75,6 +85,12 @@ protected:
     bool m_bRecorded;
     
     ChunksRangeList_t m_chunksHashList;
+    
+    rtmp::CRTMP *m_pConn;
+    uint32_t m_playingState; //#0 is stopped, sending bool false
+                             //#1 is playing sent bool false, waiting for downloaded chunk
+                             //#2 is chunk downloaded, ready to send bool true
+                             //#3 is playing sent bool true
 };
 
 }

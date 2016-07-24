@@ -43,6 +43,12 @@ using namespace iptv;
         while(m_reader->size() > m_reader->offset())
         {
             std::shared_ptr<RTMPItem> item = parseAMF();
+            /*
+            if(!item)
+            {
+                break;
+            }
+            */
 
             if(0 == objList.get() && 0 != item.get())
             {
@@ -67,20 +73,28 @@ using namespace iptv;
         {
         case SCRIPT_DATA_TYPE_NUMBER:
         {
-            item = std::make_shared<RTMPNumber>(name, m_reader->readDouble() );
-            printDBG(":  NUMBER[%lf]\n",  std::static_pointer_cast< RTMPNumber >(item)->getValue());
+            // we catch here exception as temporary workaround
+            try
+            {
+                item = std::make_shared<RTMPNumber>(name, m_reader->readDouble() );
+            }
+            catch(...)
+            {
+                item = std::make_shared<RTMPNumber>(name, 0.0);
+            }
+            printDBG(":  SCRIPT_DATA_TYPE_NUMBER[%lf]\n",  std::static_pointer_cast< RTMPNumber >(item)->getValue());
         break;
         }
         case SCRIPT_DATA_TYPE_BOOLEAN:
         {
             item = std::make_shared<RTMPBool>(name, m_reader->readUInt8() );
-            printDBG(":  NUMBER[%u]\n",  (unsigned) std::static_pointer_cast< RTMPBool >(item)->getValue());
+            printDBG(":  SCRIPT_DATA_TYPE_BOOLEAN[%u]\n",  (unsigned) std::static_pointer_cast< RTMPBool >(item)->getValue());
         break;
         }
         case SCRIPT_DATA_TYPE_STRING:
         {
             item = std::make_shared<RTMPString>(name, m_reader->readString(m_reader->readUInt16()) );
-            printDBG(":  STRING[%s]\n",  std::static_pointer_cast< RTMPString >(item)->getValue().c_str());
+            printDBG(":  SCRIPT_DATA_TYPE_STRING[%s]\n",  std::static_pointer_cast< RTMPString >(item)->getValue().c_str());
         break;
         }
         case SCRIPT_DATA_TYPE_AMF3:
@@ -91,17 +105,21 @@ using namespace iptv;
         }
         case SCRIPT_DATA_TYPE_REFERENCE:
         {
-            printDBG(":  SCRIPT_DATA_TYPE_REFERENCE\n"); exit(-1);
+            uint16_t offset = m_reader->readUInt16();
+            printDBG(":  SCRIPT_DATA_TYPE_REFERENCE\n");
         break;
         }
         case SCRIPT_DATA_TYPE_DATE:
         {
-            printDBG(":  SCRIPT_DATA_TYPE_DATE\n"); exit(-1);
+            double timestamp = m_reader->readDouble();
+            int16_t offset = static_cast<int16_t>(m_reader->readUInt16());
+            printDBG(":  SCRIPT_DATA_TYPE_DATE\n");
         break;
         }
         case SCRIPT_DATA_TYPE_LONGSTRING:
         {
-            printDBG(":  SCRIPT_DATA_TYPE_LONGSTRING\n"); exit(-1);
+            item = std::make_shared<RTMPString>(name, m_reader->readString(m_reader->readUInt32()) );
+            printDBG(":  SCRIPT_DATA_TYPE_LONGSTRING[%s]\n",  std::static_pointer_cast< RTMPString >(item)->getValue().c_str());
         break;
         }
         case SCRIPT_DATA_TYPE_OBJECT:
@@ -112,7 +130,8 @@ using namespace iptv;
         }
         case SCRIPT_DATA_TYPE_ECMAARRAY:
         {
-            printDBG(":  SCRIPT_DATA_TYPE_ECMAARRAY\n"); exit(-1);
+            printDBG(":  SCRIPT_DATA_TYPE_ECMAARRAY name[%s]\n", name.c_str());
+            item = parseScriptDataECMAArray(name);
         break;
         }
         case SCRIPT_DATA_TYPE_OBJECTEND:
@@ -173,12 +192,40 @@ using namespace iptv;
 
         for(uint32_t i=0; i<length; ++i)
         {
-            obj->append(parseAMF(""));
+            std::shared_ptr<RTMPItem> item = parseAMF("");
+            /*
+            if(!item)
+            {
+                break;
+            }
+            */
+            obj->append(item);
         }
             
         return obj;
     }
     
+    std::shared_ptr<RTMPList> CRTMPAMFDecoder::parseScriptDataECMAArray(const std::string &name)
+    {
+        std::string key;
+        std::shared_ptr<RTMPList> obj = std::make_shared<RTMPList>(name);
+        uint32_t length = m_reader->readUInt32();
+
+        for(uint32_t i=0; i<length; ++i)
+        {
+            key = m_reader->readString(m_reader->readUInt16());
+            std::shared_ptr<RTMPItem> item = parseAMF(key);
+            /*
+            if(!item)
+            {
+                break;
+            }
+            */
+            obj->append(item);
+        }
+            
+        return obj;
+    }
     
     std::shared_ptr<RTMPItem> CRTMPAMFDecoder::parseAMF3(const std::string& name)
     {
@@ -244,7 +291,6 @@ using namespace iptv;
         default:
         {
             printDBG(":  CRTMPAMFDecoder::parseAMF3 unknown type[0x%02x] -> return\n", (unsigned)type);
-            return item;
             break;
         }
         };
@@ -434,13 +480,27 @@ using namespace iptv;
                 {
                     break;
                 }
-                obj->append(parseAMF3(key));
+                std::shared_ptr<RTMPItem> item = parseAMF3(key);
+                /*
+                if(!item)
+                {
+                    break;
+                }
+                */
+                obj->append(item);
             }
             
             uint32_t elem_counts = static_cast<uint32_t>(header >> 1);
             for(uint32_t i=0; i<elem_counts; ++i)
             {
-                obj->append(parseAMF3("array_elem"));
+                std::shared_ptr<RTMPItem> item = parseAMF3("array_elem");
+                /*
+                if(!item)
+                {
+                    break;
+                }
+                */
+                obj->append(item);
             }
         }
 

@@ -135,7 +135,7 @@ static void HandleServerBW(RTMP *r, const RTMPPacket *packet);
 static void HandleClientBW(RTMP *r, const RTMPPacket *packet);
 
 static int ReadN(RTMP *r, char *buffer, int n);
-static int WriteN(RTMP *r, const char *buffer, int n);
+int WriteN(RTMP *r, const char *buffer, int n);
 
 static void DecodeTEA(AVal *key, AVal *text);
 
@@ -186,12 +186,9 @@ RTMPPacket_Reset(RTMPPacket *p)
 }
 
 int
-RTMPPacket_Alloc(RTMPPacket *p, uint32_t nSize)
+RTMPPacket_Alloc(RTMPPacket *p, int nSize)
 {
-  char *ptr;
-  if (nSize > SIZE_MAX - RTMP_MAX_HEADER_SIZE)
-    return FALSE;
-  ptr = calloc(1, nSize + RTMP_MAX_HEADER_SIZE);
+  char *ptr = calloc(1, nSize + RTMP_MAX_HEADER_SIZE);
   if (!ptr)
     return FALSE;
   p->m_body = ptr + RTMP_MAX_HEADER_SIZE;
@@ -1183,7 +1180,7 @@ RTMP_GetNextMediaPacket(RTMP *r, RTMPPacket *packet)
   while (!bHasMediaPacket && RTMP_IsConnected(r)
 	 && RTMP_ReadPacket(r, packet))
     {
-      if (!RTMPPacket_IsReady(packet) || !packet->m_nBodySize)
+      if (!RTMPPacket_IsReady(packet))
 	{
 	  continue;
 	}
@@ -1498,7 +1495,7 @@ ReadN(RTMP *r, char *buffer, int n)
   return nOriginalSize - n;
 }
 
-static int
+/*static*/ int
 WriteN(RTMP *r, const char *buffer, int n)
 {
   const char *ptr = buffer;
@@ -3552,7 +3549,6 @@ RTMP_ReadPacket(RTMP *r, RTMPPacket *packet)
   uint8_t hbuf[RTMP_MAX_HEADER_SIZE] = { 0 };
   char *header = (char *)hbuf;
   int nSize, hSize, nToRead, nChunk;
-  int didAlloc = FALSE;
   int extendedTimestamp;
 
   RTMP_Log(RTMP_LOGDEBUG2, "%s: fd=%d", __FUNCTION__, r->m_sb.sb_socket);
@@ -3646,6 +3642,7 @@ RTMP_ReadPacket(RTMP *r, RTMPPacket *packet)
 	{
 	  packet->m_nBodySize = AMF_DecodeInt24(header + 3);
 	  packet->m_nBytesRead = 0;
+	  RTMPPacket_Free(packet);
 
 	  if (nSize > 6)
 	    {
@@ -3679,7 +3676,6 @@ RTMP_ReadPacket(RTMP *r, RTMPPacket *packet)
 	  RTMP_Log(RTMP_LOGDEBUG, "%s, failed to allocate packet", __FUNCTION__);
 	  return FALSE;
 	}
-      didAlloc = TRUE;
       packet->m_headerType = (hbuf[0] & 0xc0) >> 6;
     }
 

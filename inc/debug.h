@@ -4,8 +4,6 @@
 #include <cstdio>
 #include <assert.h>
 
-#define ASSERT {}
-
 //#define DEBUG
 
 #ifdef DEBUG
