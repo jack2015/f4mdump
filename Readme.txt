@@ -1,10 +1,13 @@
 F4MDump
 Info:
-Simple F4M/HDS (Adobe HTTP Dynamic Streaming) dumper. Intended to be used by IPTVPlayer plugin: https://gitorious.org/iptv-pl-dla-openpli, http://iptvplayer.vline.pl.
+Simple F4M/HDS (Adobe HTTP Dynamic Streaming) dumper.
+Intended to be used by IPTVPlayer plugin: http://iptvplayer.pl, http://iptvplayer.vline.pl.
 
-For downloading data with URL syntax F4MDump do not use any library it use wget, called as child process using vfor/execvp.
+This branch of F4MDump will use libcurl library to download fragments/segments.
 
 Usage:
-List available bitrates from manifest file: F4MDump "/path/to/wget with additional params if needed" "http://url.to/Manifest.f4m"
+List available bitrates from manifest file: 
+F4MDump "/path/to/wget with additional params if needed" "http://url.to/Manifest.f4m"
 
-Downloading: F4MDump "/path/to/wget with additional params if needed" "http://url.to/Manifest.f4m" "/path/to/out/file" [bitrate]
+Downloading: 
+F4MDump "/path/to/wget with additional params if needed" "http://url.to/Manifest.f4m" "/path/to/out/file" [bitrate]
